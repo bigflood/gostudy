@@ -1,98 +1,127 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
+	"html"
+	"image"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
-	"sync"
-
-	"golang.org/x/net/html"
 )
 
 func main() {
-	svr := newProxyServer()
-	log.Println("listen..")
-	log.Fatal(http.ListenAndServe(":8080", svr))
+	addr := ":8080"
+	http.HandleFunc("/", handler)
+
+	log.Println("listen...", addr)
+	http.ListenAndServe(addr, nil)
 }
 
-type proxyServer struct {
-	mutex      sync.Mutex
-	clientPool *sync.Pool
-}
+func handler(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("q")
 
-func newProxyServer() *proxyServer {
-	var clientPool = &sync.Pool{
-		New: func() interface{} {
-			client := &http.Client{}
-			return client
-		},
-	}
-	return &proxyServer{
-		clientPool: clientPool,
-	}
-}
-
-func (svr *proxyServer) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	log.Println(req.URL)
-	client := svr.clientPool.Get().(*http.Client)
-	defer svr.clientPool.Put(client)
-
-	targetURL := new(url.URL)
-	*targetURL = *req.URL
-	targetURL.Scheme = "https"
-	targetURL.Host = "en.wikipedia.org"
-
-	req2, err := http.NewRequest(req.Method, targetURL.String(), req.Body)
+	req, err := http.NewRequest(r.Method, targetURL, r.Body)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	copyHeader(req2.Header, req.Header)
+	copyHeader(req.Header, r.Header)
+	req.Header.Set("Accept-Encoding", "")
 
-	resp, err := client.Do(req2)
+	//client := &http.Client{}
+	client := new(http.Client)
+	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatal(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	copyHeader(rw.Header(), resp.Header)
+	copyHeader(w.Header(), resp.Header)
+
+	defer resp.Body.Close()
+
 	contentType := resp.Header.Get("Content-Type")
-
-	if resp.Uncompressed && strings.HasPrefix(contentType, "text/html") {
-		log.Println("html..")
-		doc, err := html.Parse(resp.Body)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		var f func(n *html.Node)
-		f = func(n *html.Node) {
-			if n.Type == html.TextNode {
-				n.Data = strings.Replace(n.Data, "i", "_", -1)
-			}
-			for c := n.FirstChild; c != nil; c = c.NextSibling {
-				f(c)
-			}
-		}
-		f(doc)
-
-		err = html.Render(rw, doc)
-		if err != nil {
-			log.Fatal(err)
-		}
+	if strings.HasPrefix(contentType, "text/html") {
+		processHtml(w, resp.Body)
+	} else if strings.HasPrefix(contentType, "image/") {
+		processImage(w, resp.Body)
 	} else {
-		w, err := io.Copy(rw, resp.Body)
-		if err != nil {
-			log.Fatal("io.Copy..", err)
-			return
-		}
-		log.Println(w, "bytes")
+		io.Copy(w, resp.Body)
 	}
 }
 
+func processImage(w http.ResponseWriter, body io.Reader) {
+	img, imgfmt, err := image.Decode(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	newimg := rotate(img)
+
+	buf := bytes.NewBuffer(nil)
+
+	if imgfmt == "png" {
+		err = png.Encode(buf, newimg)
+	} else {
+		err = jpeg.Encode(buf, newimg, nil)
+	}
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
+	buf.WriteTo(w)
+}
+
+func rotate(img image.Image) image.Image {
+	rect := img.Bounds()
+	newimg := image.NewRGBA(rect)
+
+	w := rect.Size().X
+	h := rect.Size().Y
+	for y := 0; y < h; y++ {
+		y2 := rect.Min.Y + h - y - 1
+		for x := 0; x < w; x++ {
+			x2 := rect.Min.X + w - x - 1
+			newimg.Set(x2, y2, img.At(x, y))
+		}
+	}
+
+	return newimg
+}
+
+var urlRe = regexp.MustCompile(`"(http|https)://[^"]*"`)
+
+func processHtml(w http.ResponseWriter, body io.Reader) {
+	data, err := ioutil.ReadAll(body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	newData := urlRe.ReplaceAllFunc(data, func(s []byte) []byte {
+		oldURL := html.UnescapeString(string(s[1 : len(s)-1]))
+		newURL := "http://localhost:8080/?q=" + url.QueryEscape(oldURL)
+		return ([]byte)(fmt.Sprintf(`"%s"`, newURL))
+	})
+
+	w.Header().Set("Content-Length", strconv.Itoa(len(newData)))
+	w.Write(newData)
+}
+
+//type Header map[string][]string
 func copyHeader(dst, src http.Header) {
 	for k, vv := range src {
 		for _, v := range vv {
