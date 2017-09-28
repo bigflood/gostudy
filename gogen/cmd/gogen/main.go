@@ -5,6 +5,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
+	"text/template"
 )
 
 type Interface struct {
@@ -23,22 +25,27 @@ type Field struct {
 	Type string
 }
 
-func getInterfacesFrom(f *ast.File) []Interface {
-	var list []Interface
+// func (f Field) PascalCaseName() string {
+// 	f.Name[0]
+// }
+
+func getInterfacesFrom(f *ast.File) map[string]Interface {
+	result := make(map[string]Interface)
 
 	for _, d := range f.Decls {
 		if g, ok := d.(*ast.GenDecl); ok {
 			for _, s := range g.Specs {
 				if ts, ok := s.(*ast.TypeSpec); ok {
 					if i, ok := ts.Type.(*ast.InterfaceType); ok {
-						list = append(list, getInterface(ts.Name.Name, i))
+						p := getInterface(ts.Name.Name, i)
+						result[p.Name] = p
 					}
 				}
 			}
 		}
 	}
 
-	return list
+	return result
 }
 
 func getInterface(name string, i *ast.InterfaceType) Interface {
@@ -54,6 +61,14 @@ func getMethods(methods *ast.FieldList) []Func {
 	for _, m := range methods.List {
 		f := Func{}
 
+		ft, _ := m.Type.(*ast.FuncType)
+
+		// param
+		f.Params = getFields(ft.Params)
+
+		// result
+		f.Results = getFields(ft.Results)
+
 		for _, n := range m.Names {
 			f.Name = n.Name
 			list = append(list, f)
@@ -61,6 +76,37 @@ func getMethods(methods *ast.FieldList) []Func {
 	}
 
 	return list
+}
+
+func getFields(fl *ast.FieldList) []Field {
+	result := make([]Field, 0, len(fl.List))
+
+	for _, f := range fl.List {
+		result = append(result, getFieldsFromField(f)...)
+	}
+
+	return result
+}
+
+func getFieldsFromField(f *ast.Field) []Field {
+	result := make([]Field, len(f.Names))
+	tn := f.Type.(*ast.Ident).Name
+
+	if len(f.Names) == 0 {
+		result = append(result, Field{
+			Name: "ret",
+			Type: tn,
+		})
+	} else {
+		for i, n := range f.Names {
+			result[i] = Field{
+				Name: n.Name,
+				Type: tn,
+			}
+		}
+	}
+
+	return result
 }
 
 func main() {
@@ -73,10 +119,20 @@ func main() {
 		return
 	}
 
-	for _, i := range getInterfacesFrom(f) {
-		fmt.Println(i)
+	//ast.Print(fset, f)
+
+	t, err := template.ParseFiles("template.txt")
+	if err != nil {
+		panic(err)
 	}
 
-	//ast.Print(fset, f)
+	def, ok := getInterfacesFrom(f)["Service"]
+	if !ok {
+		panic("Service interface not found!")
+	}
+
+	if err := t.Execute(os.Stdout, def); err != nil {
+		panic(err)
+	}
 
 }

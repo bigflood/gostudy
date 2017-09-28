@@ -1,0 +1,52 @@
+package httptransport
+
+import (
+	"dadev/gostudy/gogen/service"
+	"encoding/json"
+	"net/http"
+)
+
+func New(svc service.{{.Name}}) http.Handler {
+	return &httpTransport{
+		svc: svc,
+	}
+}
+
+type httpTransport struct {
+	svc service.{{.Name}}
+}
+
+{{range .Methods}}
+type {{.Name}}Req struct {
+    {{range .Params}}
+	{{.Name}} {{.Type}}
+    {{end}}
+}
+
+type {{.Name}}Resp struct {
+    {{range .Results}}
+	{{.Name}} {{.Type}}
+    {{end}}
+}
+{{end}}
+
+func (ht *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	switch r.URL.Path {
+    {{range .Methods}}
+	case "/{{.Name}}":
+		var req {{.Name}}Req
+		json.NewDecoder(r.Body).Decode(&req)
+		
+        TODO!! := ht.svc.{{.Name}}(
+            {{range .Params}}
+            req.{{.Name}},
+            {{end}}
+            )
+
+		resp := {{.Name}}Resp{TODO!!}
+		json.NewEncoder(w).Encode(&resp)
+    {{end}}
+	}
+}
