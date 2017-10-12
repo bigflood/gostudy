@@ -1,10 +1,11 @@
 package main
 
 import (
-	"dadev/gostudy/gogen/httptransport"
-	"dadev/gostudy/gogen/service"
 	"log"
 	"net/http"
+
+	"github.com/bigflood/gostudy/gogen/httptransport"
+	"github.com/bigflood/gostudy/gogen/service"
 )
 
 func main() {

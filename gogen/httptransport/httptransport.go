@@ -1,9 +1,10 @@
 package httptransport
 
 import (
-	"dadev/gostudy/gogen/service"
 	"encoding/json"
 	"net/http"
+
+	"github.com/bigflood/gostudy/gogen/service"
 )
 
 func New(svc service.Service) http.Handler {
