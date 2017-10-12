@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -111,10 +112,21 @@ func getFieldsFromField(f *ast.Field) []Field {
 }
 
 func main() {
+	srcFile := flag.String("s", "", ".go source file path")
+	tmplFile := flag.String("t", "", "template file path")
+	infName := flag.String("i", "Service", "interface name")
+
+	flag.Parse()
+
+	if *srcFile == "" || *tmplFile == "" || *infName == "" {
+		flag.Usage()
+		os.Exit(-1)
+	}
+
 	fset := token.NewFileSet()
 
 	// Parse src but stop after processing the imports.
-	f, err := parser.ParseFile(fset, "../../service/service.go", nil, 0)
+	f, err := parser.ParseFile(fset, *srcFile, nil, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -122,12 +134,12 @@ func main() {
 
 	//ast.Print(fset, f)
 
-	t, err := template.ParseFiles("template.txt")
+	t, err := template.ParseFiles(*tmplFile)
 	if err != nil {
 		panic(err)
 	}
 
-	def, ok := getInterfacesFrom(f)["Service"]
+	def, ok := getInterfacesFrom(f)[*infName]
 	if !ok {
 		panic("Service interface not found!")
 	}
