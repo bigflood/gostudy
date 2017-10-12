@@ -19,15 +19,29 @@ type httpTransport struct {
 {{range .Methods}}
 type {{.Name}}Req struct {
     {{range .Params}}
-	{{.Name}} {{.Type}}
+	{{.PascalCaseName}} {{.Type}}
     {{end}}
 }
 
 type {{.Name}}Resp struct {
     {{range .Results}}
-	{{.Name}} {{.Type}}
+	{{.PascalCaseName}} {{.Type}}
     {{end}}
 }
+
+func New{{.Name}}Resp(
+	{{range .Results}}
+	{{.Name}} {{.Type}},
+    {{end}}
+) {{.Name}}Resp {
+	return {{.Name}}Resp{
+	{{range .Results}}
+	{{.PascalCaseName}}: {{.Name}},
+    {{end}}
+	}
+}
+
+
 {{end}}
 
 func (ht *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -39,13 +53,12 @@ func (ht *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var req {{.Name}}Req
 		json.NewDecoder(r.Body).Decode(&req)
 		
-        TODO!! := ht.svc.{{.Name}}(
+        resp := New{{.Name}}Resp( ht.svc.{{.Name}}(
             {{range .Params}}
             req.{{.Name}},
             {{end}}
-            )
+            ))
 
-		resp := {{.Name}}Resp{TODO!!}
 		json.NewEncoder(w).Encode(&resp)
     {{end}}
 	}

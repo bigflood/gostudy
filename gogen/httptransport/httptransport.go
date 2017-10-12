@@ -22,7 +22,14 @@ type AddReq struct {
 }
 
 type AddResp struct {
-	Sum int
+	Sum, Sub int
+}
+
+func NewAddResp(sum, sub int) AddResp {
+	return AddResp{
+		Sum: sum,
+		Sub: sub,
+	}
 }
 
 type MulReq struct {
@@ -40,8 +47,10 @@ func (ht *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "/add":
 		var req AddReq
 		json.NewDecoder(r.Body).Decode(&req)
-		v := ht.svc.Add(req.A, req.B)
-		resp := AddResp{Sum: v}
+
+		resp := NewAddResp(ht.svc.Add(req.A, req.B))
+		// resp := AddResp{Sum: v}
+
 		json.NewEncoder(w).Encode(&resp)
 	case "/mul":
 		var req MulReq

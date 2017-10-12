@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"strings"
 	"text/template"
 )
 
@@ -25,9 +26,9 @@ type Field struct {
 	Type string
 }
 
-// func (f Field) PascalCaseName() string {
-// 	f.Name[0]
-// }
+func (f Field) PascalCaseName() string {
+	return strings.ToUpper(f.Name[:1]) + f.Name[1:]
+}
 
 func getInterfacesFrom(f *ast.File) map[string]Interface {
 	result := make(map[string]Interface)
