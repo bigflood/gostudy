@@ -115,10 +115,11 @@ func main() {
 	srcFile := flag.String("s", "", ".go source file path")
 	tmplFile := flag.String("t", "", "template file path")
 	infName := flag.String("i", "Service", "interface name")
+	outFile := flag.String("o", "", "output file path")
 
 	flag.Parse()
 
-	if *srcFile == "" || *tmplFile == "" || *infName == "" {
+	if *srcFile == "" || *tmplFile == "" || *infName == "" || *outFile == "" {
 		flag.Usage()
 		os.Exit(-1)
 	}
@@ -126,7 +127,7 @@ func main() {
 	fset := token.NewFileSet()
 
 	// Parse src but stop after processing the imports.
-	f, err := parser.ParseFile(fset, *srcFile, nil, 0)
+	parseResult, err := parser.ParseFile(fset, *srcFile, nil, 0)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -139,12 +140,19 @@ func main() {
 		panic(err)
 	}
 
-	def, ok := getInterfacesFrom(f)[*infName]
+	def, ok := getInterfacesFrom(parseResult)[*infName]
 	if !ok {
 		panic("Service interface not found!")
 	}
 
-	if err := t.Execute(os.Stdout, def); err != nil {
+	f, err := os.Create(*outFile)
+	if err != nil {
+		panic(err)
+	}
+
+	defer f.Close()
+
+	if err := t.Execute(f, def); err != nil {
 		panic(err)
 	}
 

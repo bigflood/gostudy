@@ -1,7 +1,5 @@
 package service
 
-//go:generate asdfasdfasfd.exe -i xxxx.templ yyyy.go
-
 type Service interface {
 	Add(a, b int) (sum, sub int)
 	Mul(a, b int) int

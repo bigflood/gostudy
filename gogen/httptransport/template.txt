@@ -1,7 +1,7 @@
 package httptransport
 
 import (
-	"dadev/gostudy/gogen/service"
+	"github.com/bigflood/gostudy/gogen/service"
 	"encoding/json"
 	"net/http"
 )
@@ -55,7 +55,7 @@ func (ht *httpTransport) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		
         resp := New{{.Name}}Resp( ht.svc.{{.Name}}(
             {{range .Params}}
-            req.{{.Name}},
+            req.{{.PascalCaseName}},
             {{end}}
             ))
 
