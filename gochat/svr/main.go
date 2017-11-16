@@ -1,14 +1,38 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"sync"
+
+	"github.com/go-redis/redis"
 )
 
+const chattingChan = "ch1"
+
+func connectToRedis() *redis.Client {
+	redisEndpoint := os.Getenv("REDIS_ENDPOINT")
+	log.Println("redisEndpoint:", redisEndpoint)
+
+	client := redis.NewClient(&redis.Options{
+		Addr:     redisEndpoint,
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	pong, err := client.Ping().Result()
+	fmt.Println(pong, err)
+
+	return client
+}
+
 func main() {
+	redisClient := connectToRedis()
+
 	go http.ListenAndServe(":9090", nil)
 
 	port := "8080"
@@ -19,8 +43,7 @@ func main() {
 
 	log.Println("Listen", port, "..")
 
-	svr := NewChattingServer()
-	go svr.RunMsgDistributer()
+	svr := NewChattingServer(redisClient)
 
 	for {
 		conn, err := ln.Accept()
@@ -35,38 +58,29 @@ func main() {
 }
 
 type chattingServer struct {
+	redisClient *redis.Client
+
 	lock    sync.Mutex
 	clients []*clientInfo
-	msgChan chan []byte
 }
 
 type clientInfo struct {
-	conn     net.Conn
-	sendChan chan []byte
+	conn   net.Conn
+	pubSub *redis.PubSub
 }
 
-func NewChattingServer() *chattingServer {
+func NewChattingServer(redisClient *redis.Client) *chattingServer {
 	return &chattingServer{
-		msgChan: make(chan []byte),
-	}
-}
-
-func (svr *chattingServer) RunMsgDistributer() {
-	for msg := range svr.msgChan {
-
-		svr.lock.Lock()
-		for _, client := range svr.clients {
-			client.sendChan <- msg
-		}
-		svr.lock.Unlock()
+		redisClient: redisClient,
 	}
 }
 
 func (svr *chattingServer) AddClient(conn net.Conn) {
 	info := &clientInfo{
-		conn:     conn,
-		sendChan: make(chan []byte),
+		conn: conn,
 	}
+
+	info.pubSub = svr.redisClient.Subscribe(chattingChan)
 
 	svr.lock.Lock()
 	defer svr.lock.Unlock()
@@ -77,6 +91,8 @@ func (svr *chattingServer) AddClient(conn net.Conn) {
 }
 
 func (svr *chattingServer) recvFromClient(info *clientInfo) {
+	defer info.pubSub.Close()
+
 	buf := make([]byte, 1024)
 
 	for {
@@ -86,10 +102,13 @@ func (svr *chattingServer) recvFromClient(info *clientInfo) {
 			break
 		}
 
-		svr.msgChan <- buf[:n]
+		msg := string(buf[:n])
+		_, err = svr.redisClient.Publish(chattingChan, msg).Result()
+		if err != nil {
+			log.Println("Publish error:", err)
+		}
 	}
 
-	close(info.sendChan)
 	info.conn.Close()
 
 	svr.lock.Lock()
@@ -103,9 +122,16 @@ func (svr *chattingServer) recvFromClient(info *clientInfo) {
 }
 
 func (svr *chattingServer) sendToClient(info *clientInfo) {
-	for msg := range info.sendChan {
-		_, err := info.conn.Write(msg)
+	for {
+		msg, err := info.pubSub.ReceiveMessage()
 		if err != nil {
+			log.Println("Receive error:", err)
+			break
+		}
+
+		s := msg.Payload
+
+		if _, err := info.conn.Write(([]byte)(s)); err != nil {
 			log.Println("Write error:", err)
 			break
 		}
