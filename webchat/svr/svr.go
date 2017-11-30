@@ -1,27 +1,22 @@
-package main
+package svr
 
 import (
 	"log"
+	"fmt"
+	"sync"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 	"github.com/go-redis/redis"
-	"os"
-	"fmt"
-	"sync"
 )
 
-var upgrader = websocket.Upgrader{}
-const chattingChan = "ch1"
-
-func main() {
-	redisClient := connectToRedis()
-
-	svr := NewChattingServer(redisClient)
-
-	http.HandleFunc("/webchat", svr.webchatHandler)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+type ChattingServer interface {
+	WebchatHandler(w http.ResponseWriter, r *http.Request)
 }
+
+var upgrader = websocket.Upgrader{}
+
+const chattingChan = "ch1"
 
 type chattingServer struct {
 	redisClient *redis.Client
@@ -35,13 +30,14 @@ type clientInfo struct {
 	pubSub *redis.PubSub
 }
 
-func NewChattingServer(redisClient *redis.Client) *chattingServer {
+func New(redisEndpoint string) ChattingServer {
+	redisClient := connectToRedis(redisEndpoint)
 	return &chattingServer{
 		redisClient: redisClient,
 	}
 }
 
-func (svr *chattingServer) webchatHandler(w http.ResponseWriter, r *http.Request) {
+func (svr *chattingServer) WebchatHandler(w http.ResponseWriter, r *http.Request) {
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -117,9 +113,7 @@ func (svr *chattingServer) sendToClient(info *clientInfo) {
 	}
 }
 
-
-func connectToRedis() *redis.Client {
-	redisEndpoint := os.Getenv("REDIS_ENDPOINT")
+func connectToRedis(redisEndpoint string) *redis.Client {
 	log.Println("redisEndpoint:", redisEndpoint)
 
 	client := redis.NewClient(&redis.Options{
