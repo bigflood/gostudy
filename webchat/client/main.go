@@ -17,8 +17,18 @@ func main() {
 
 	buf := make([]byte, 256)
 
+	stopCh := make(chan struct{})
+
+	go recvMsg(c, stopCh)
+
 mainLoop:
 	for {
+		select {
+		case <-stopCh:
+			break mainLoop
+		default:
+		}
+
 		r, err := os.Stdin.Read(buf)
 		if err != nil {
 			log.Println(err)
@@ -31,7 +41,14 @@ mainLoop:
 			log.Println(err)
 			break
 		}
+	}
+}
 
+func recvMsg(c *websocket.Conn, stopCh chan struct{}) {
+	defer close(stopCh)
+
+mainLoop:
+	for {
 		mt, msg, err := c.ReadMessage()
 		if err != nil {
 			log.Println(err)
