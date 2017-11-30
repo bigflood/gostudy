@@ -14,7 +14,9 @@ type ChattingServer interface {
 	WebchatHandler(w http.ResponseWriter, r *http.Request)
 }
 
-var upgrader = websocket.Upgrader{}
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
 
 const chattingChan = "ch1"
 
@@ -38,9 +40,11 @@ func New(redisEndpoint string) ChattingServer {
 }
 
 func (svr *chattingServer) WebchatHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("WebchatHandler", r.URL)
 
 	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		log.Println("upgrade failed!", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -49,6 +53,9 @@ func (svr *chattingServer) WebchatHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (svr *chattingServer) AddClient(conn *websocket.Conn) {
+	log.Println("AddClient..")
+	defer log.Println("AddClient.. end")
+
 	info := &clientInfo{
 		conn: conn,
 	}
@@ -75,8 +82,11 @@ mainLoop:
 			log.Println("Read error:", err)
 			break
 		}
+
+		log.Println("recv", mt, msg)
+
 		switch mt {
-		case websocket.BinaryMessage:
+		case websocket.TextMessage, websocket.BinaryMessage:
 			_, err = svr.redisClient.Publish(chattingChan, msg).Result()
 			if err != nil {
 				log.Println("Publish error:", err)
@@ -106,7 +116,9 @@ func (svr *chattingServer) sendToClient(info *clientInfo) {
 
 		s := msg.Payload
 
-		if err := info.conn.WriteMessage(websocket.BinaryMessage, ([]byte)(s)); err != nil {
+		log.Println("WriteMessage..", s)
+
+		if err := info.conn.WriteMessage(websocket.TextMessage, ([]byte)(s)); err != nil {
 			log.Println("Write error:", err)
 			break
 		}
