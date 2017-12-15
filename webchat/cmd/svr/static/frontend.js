@@ -24,7 +24,16 @@ $(function () {
     }
 
     // open connection
-    var connection = new WebSocket('ws://127.0.0.1:8080/webchat');
+    var loc = window.location, new_uri;
+    if (loc.protocol === "https:") {
+        new_uri = "wss:";
+    } else {
+        new_uri = "ws:";
+    }
+    new_uri += "//" + loc.host;
+    new_uri += "/webchat";
+
+    var connection = new WebSocket(new_uri);
 
     connection.onopen = function () {
         // first we want users to enter their names
