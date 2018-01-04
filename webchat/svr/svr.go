@@ -1,13 +1,14 @@
 package svr
 
 import (
-	"log"
 	"fmt"
-	"sync"
+	"log"
 	"net/http"
+	"os"
+	"sync"
 
-	"github.com/gorilla/websocket"
 	"github.com/go-redis/redis"
+	"github.com/gorilla/websocket"
 )
 
 type ChattingServer interface {
@@ -21,6 +22,7 @@ var upgrader = websocket.Upgrader{
 const chattingChan = "ch1"
 
 type chattingServer struct {
+	hostname    string
 	redisClient *redis.Client
 
 	lock    sync.Mutex
@@ -34,7 +36,10 @@ type clientInfo struct {
 
 func New(redisEndpoint string) ChattingServer {
 	redisClient := connectToRedis(redisEndpoint)
+	hostname, _ := os.Hostname()
+
 	return &chattingServer{
+		hostname:    hostname,
 		redisClient: redisClient,
 	}
 }
@@ -65,6 +70,8 @@ func (svr *chattingServer) AddClient(conn *websocket.Conn) {
 	svr.lock.Lock()
 	svr.clients = append(svr.clients, info)
 	svr.lock.Unlock()
+
+	info.conn.WriteMessage(websocket.TextMessage, ([]byte)(fmt.Sprint("hostname:", svr.hostname)))
 
 	go svr.sendToClient(info)
 
@@ -115,6 +122,7 @@ func (svr *chattingServer) sendToClient(info *clientInfo) {
 		}
 
 		s := msg.Payload
+		s = fmt.Sprint("from:", svr.hostname, "msg:", s)
 
 		log.Println("WriteMessage..", s)
 
