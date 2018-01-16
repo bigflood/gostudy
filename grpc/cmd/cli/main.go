@@ -12,7 +12,7 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", "localhost:8082", "endpoint")
+	addr := flag.String("addr", "localhost:8888", "endpoint")
 	flag.Parse()
 
 	log.Println("dial ", *addr, " ..")

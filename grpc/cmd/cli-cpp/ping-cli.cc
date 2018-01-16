@@ -8,7 +8,7 @@ using namespace std;
 
 int main() {
     auto stub = pb::Ping::NewStub(
-        grpc::CreateChannel("localhost:8082", grpc::InsecureChannelCredentials())
+        grpc::CreateChannel("localhost:8888", grpc::InsecureChannelCredentials())
     );
 
     
