@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -10,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"golang.org/x/net/http2"
 	"io/ioutil"
 	"log"
 	"math/big"
@@ -21,10 +23,14 @@ import (
 )
 
 func main() {
-	generateCert()
+	tlsConfig, err := generateCert("localhost", false)
+	if err != nil {
+		panic(err)
+	}
 
 	httpSvr := http.Server{
-		Handler: new(helloHandler),
+		Handler:   new(helloHandler),
+		TLSConfig: tlsConfig,
 	}
 
 	listener, err := net.Listen("tcp", ":")
@@ -34,12 +40,14 @@ func main() {
 
 	go func() {
 		log.Println("Serve..")
-		httpSvr.ServeTLS(listener, "cert.pem", "key.pem")
+		httpSvr.ServeTLS(listener, "", "")
 	}()
 
 	tr := &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
+
+	http2.ConfigureTransport(tr)
 
 	httpClient := http.Client{
 		Transport: tr,
@@ -74,18 +82,22 @@ type helloHandler struct {
 }
 
 func (*helloHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	fmt.Printf("ServeHTTP: cert=%+v  %v  %v %v \n",
+		r.TLS.HandshakeComplete,
+		r.Proto,
+		r.Header.Get("Content-Type"),
+		r.URL)
+
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Hello\n")
 }
 
-func generateCert() {
-	host := "localhost"
-	isCA := false
+func generateCert(host string, isCA bool) (*tls.Config, error) {
 
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	notBefore := time.Now()
@@ -93,7 +105,7 @@ func generateCert() {
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		log.Fatalf("failed to generate serial number: %s", err)
+		return nil, err
 	}
 
 	template := x509.Certificate{
@@ -101,6 +113,7 @@ func generateCert() {
 		Subject: pkix.Name{
 			Organization: []string{"Acme Co"},
 		},
+
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
 
@@ -125,26 +138,31 @@ func generateCert() {
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey(priv), priv)
 	if err != nil {
-		log.Fatalf("Failed to create certificate: %s", err)
+		return nil, err
 	}
 
-	certOut, err := os.Create("cert.pem")
+	certOut := bytes.NewBuffer(nil)
+	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
+		return nil, err
+	}
+
+	keyOut := bytes.NewBuffer(nil)
+	if err := pem.Encode(keyOut, pemBlockForKey(priv)); err != nil {
+		return nil, err
+	}
+
+	cert, err := tls.X509KeyPair(certOut.Bytes(), keyOut.Bytes())
 	if err != nil {
-		log.Fatalf("failed to open cert.pem for writing: %s", err)
+		return nil, err
 	}
 
-	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
-	certOut.Close()
-	log.Print("written cert.pem\n")
+	config := &tls.Config{}
 
-	keyOut, err := os.OpenFile("key.pem", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		log.Print("failed to open key.pem for writing:", err)
-		return
+	config.Certificates = []tls.Certificate{
+		cert,
 	}
-	pem.Encode(keyOut, pemBlockForKey(priv))
-	keyOut.Close()
-	log.Print("written key.pem\n")
+
+	return config, nil
 }
 
 func publicKey(priv interface{}) interface{} {
