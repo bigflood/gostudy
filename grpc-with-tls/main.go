@@ -5,13 +5,14 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
-	"github.com/bigflood/gostudy/gencert"
-	"github.com/bigflood/gostudy/http-grpc/pb"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"log"
 	"net"
 	"strings"
+
+	"github.com/bigflood/gostudy/gencert"
+	"github.com/bigflood/gostudy/grpc-with-tls/pb"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 //go:generate protoc ./pb/ping.proto --go_out=plugins=grpc:.
