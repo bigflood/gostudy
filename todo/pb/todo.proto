@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package pb;
+
+service Todo {
+  rpc Add (AddRequest) returns (AddReply) {}
+  rpc List (ListRequest) returns (ListReply) {}
+  rpc Done (DoneRequest) returns (DoneReply) {}
+}
+
+
+message AddRequest {
+  string desc = 1;
+}
+
+message AddReply {
+}
+
+
+message ListRequest {
+}
+
+message ListReply {
+  repeated Task tasks = 1;
+}
+
+
+message DoneRequest {
+  int32 index = 1;
+}
+
+message DoneReply {
+}
+
+
+message Task {
+  string desc = 1;
+  bool done = 2;
+}
