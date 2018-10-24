@@ -15,7 +15,6 @@
 package cmd
 
 import (
-	"github.com/bigflood/gostudy/todo/store"
 	"github.com/spf13/cobra"
 	"strconv"
 )
@@ -24,8 +23,10 @@ import (
 var doneCmd = &cobra.Command{
 	Use:   "done",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fileName := cmd.Flag("file").Value.String()
-		s := store.NewInFile(fileName)
+		s, err := OpenStore(cmd)
+		if err != nil {
+			return err
+		}
 
 		for _, a := range args {
 			idx,err := strconv.Atoi(a)

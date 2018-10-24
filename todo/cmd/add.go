@@ -15,17 +15,19 @@
 package cmd
 
 import (
-	"github.com/bigflood/gostudy/todo/store"
 	"github.com/spf13/cobra"
 	"strings"
 )
 
 // addCmd represents the add command
 var addCmd = &cobra.Command{
-	Use:   "add",
+	Use: "add",
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fileName := cmd.Flag("file").Value.String()
-		s := store.NewInFile(fileName)
+		s, err := OpenStore(cmd)
+		if err != nil {
+			return err
+		}
+
 		return s.Add(strings.Join(args, " "))
 	},
 }
