@@ -5,6 +5,10 @@ type Task struct {
 	Done bool
 }
 
+type Filter struct {
+	Done *bool
+}
+
 func NewInMem() *InMem {
 	return &InMem{}
 }
@@ -18,8 +22,19 @@ func (p *InMem) Add(desc string) error {
 	return nil
 }
 
-func (p *InMem) List() ([]Task, error) {
-	return p.Tasks, nil
+func (p *InMem) List(filter Filter) ([]Task, error) {
+	if filter.Done == nil {
+		return p.Tasks, nil
+	}
+
+	tasks := make([]Task, 0, len(p.Tasks))
+	for _, task := range p.Tasks {
+		if *filter.Done != task.Done {
+			continue
+		}
+		tasks = append(tasks, task)
+	}
+	return tasks, nil
 }
 
 func (p *InMem) Done(index int) error {

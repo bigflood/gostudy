@@ -2,57 +2,51 @@ package store
 
 import (
 	"encoding/json"
-	"os"
 )
+
 
 func NewInFile(fileName string) *InFile {
 	return &InFile{
-		fileName: fileName,
+		file: NewFile(fileName),
+	}
+}
+
+func NewFromDataSource(file DataSource) *InFile {
+	return &InFile{
+		file: file,
 	}
 }
 
 type InFile struct {
-	fileName string
+	file DataSource
 }
 
-func readFromFile(fileName string) (*InMem, error) {
+func readFromFile(file DataSource) (*InMem, error) {
 	data := NewInMem()
 
-	if _, err := os.Stat(fileName); os.IsNotExist(err) {
-		return data, nil
-	}
-
-	f, err := os.Open(fileName)
+	bytes, err := file.ReadAll()
 	if err != nil {
 		return nil, err
 	}
 
-	if err := json.NewDecoder(f).Decode(data); err != nil {
-		return nil, err
-	}
-
-	if err := f.Close(); err != nil {
+	if err := json.Unmarshal(bytes, data); err != nil {
 		return nil, err
 	}
 
 	return data, nil
 }
 
-func writeToFile(fileName string, data *InMem) error {
-	f, err := os.Create(fileName)
+func writeToFile(file DataSource, data *InMem) error {
+	b, err := json.Marshal(data)
 	if err != nil {
 		return err
 	}
 
-	if err := json.NewEncoder(f).Encode(data); err != nil {
-		return err
-	}
-
-	return f.Close()
+	return file.WriteAll(b)
 }
 
 func (p *InFile) Add(desc string) error {
-	data, err := readFromFile(p.fileName)
+	data, err := readFromFile(p.file)
 	if err != nil {
 		return err
 	}
@@ -61,20 +55,20 @@ func (p *InFile) Add(desc string) error {
 		return err
 	}
 
-	return writeToFile(p.fileName, data)
+	return writeToFile(p.file, data)
 }
 
-func (p *InFile) List() ([]Task, error) {
-	data, err := readFromFile(p.fileName)
+func (p *InFile) List(filter Filter) ([]Task, error) {
+	data, err := readFromFile(p.file)
 	if err != nil {
 		return nil, err
 	}
 
-	return data.List()
+	return data.List(filter)
 }
 
 func (p *InFile) Done(index int) error {
-	data, err := readFromFile(p.fileName)
+	data, err := readFromFile(p.file)
 	if err != nil {
 		return err
 	}
@@ -83,5 +77,5 @@ func (p *InFile) Done(index int) error {
 		return err
 	}
 
-	return writeToFile(p.fileName, data)
+	return writeToFile(p.file, data)
 }
