@@ -16,19 +16,31 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/bigflood/gostudy/todo/store"
 	"github.com/spf13/cobra"
 )
 
 // listCmd represents the list command
 var listCmd = &cobra.Command{
-	Use:   "list",
+	Use: "list",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		s, err := OpenStore(cmd)
 		if err != nil {
 			return err
 		}
 
-		tasks, err := s.List()
+		filter := store.Filter{}
+
+		switch {
+		case flagDone:
+			v := flagDone
+			filter = store.Filter{Done: &v}
+		case flagNotDone:
+			v := !flagNotDone
+			filter = store.Filter{Done: &v}
+		}
+
+		tasks, err := s.List(filter)
 		if err != nil {
 			return err
 		}
@@ -47,6 +59,11 @@ var listCmd = &cobra.Command{
 	},
 }
 
+var (
+	flagDone    bool
+	flagNotDone bool
+)
+
 func init() {
 	rootCmd.AddCommand(listCmd)
 
@@ -58,5 +75,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// listCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	listCmd.Flags().BoolVarP(&flagDone,
+		"done", "d", false, "완료된 항목들만 리스트함")
+	listCmd.Flags().BoolVarP(&flagNotDone,
+		"not-done", "n", false, "완료 안된 항목들만 리스트함")
 }

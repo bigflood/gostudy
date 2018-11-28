@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"github.com/bigflood/gostudy/todo/pb"
+	"github.com/bigflood/gostudy/todo/store"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"log"
@@ -65,26 +66,37 @@ func init() {
 	serveCmd.Flags().String("addr", ":8082", "listen address")
 }
 
-func NewTodoServer(file Store) *todoServer {
-	return &todoServer{file}
+func NewTodoServer(file Store) *TodoServer {
+	return &TodoServer{file}
 }
 
-type todoServer struct {
+type TodoServer struct {
 	file Store
 }
 
-func (svr *todoServer) Add(ctx context.Context, req *pb.AddRequest) (*pb.AddReply, error) {
+func (svr *TodoServer) Add(ctx context.Context, req *pb.AddRequest) (*pb.AddReply, error) {
 	return &pb.AddReply{}, svr.file.Add(req.Desc)
 }
 
-func (svr *todoServer) Done(ctx context.Context, req *pb.DoneRequest) (*pb.DoneReply, error) {
+func (svr *TodoServer) Done(ctx context.Context, req *pb.DoneRequest) (*pb.DoneReply, error) {
 	return &pb.DoneReply{}, svr.file.Done(int(req.Index))
 }
 
-func (svr *todoServer) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
+func (svr *TodoServer) List(ctx context.Context, req *pb.ListRequest) (*pb.ListReply, error) {
 	reply := &pb.ListReply{}
 
-	tasks, err := svr.file.List()
+	filter := store.Filter{}
+
+	switch req.DoneFilter {
+	case pb.DoneFilter_DONE:
+		v := true
+		filter = store.Filter{Done: &v}
+	case pb.DoneFilter_NOT_DONE:
+		v := false
+		filter = store.Filter{Done: &v}
+	}
+
+	tasks, err := svr.file.List(filter)
 	if err != nil {
 		return reply, err
 	}

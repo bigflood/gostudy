@@ -28,4 +28,11 @@ var _ = Describe("InmenList", func() {
 			{Desc:"task3", Done:false},
 		}))
 	})
+
+	It("범위를 벗어난 index로 Done함수를 호출하면 실패해야함", func() {
+		err := inmem.Done(-1)
+		Expect(err).To(HaveOccurred())
+		err = inmem.Done(999)
+		Expect(err).To(HaveOccurred())
+	})
 })

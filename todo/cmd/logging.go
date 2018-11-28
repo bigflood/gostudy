@@ -24,13 +24,13 @@ func (svc loggingSvc) Add(desc string) (err error) {
 	return
 }
 
-func (svc loggingSvc) List() (tasks []store.Task, err error) {
+func (svc loggingSvc) List(filter store.Filter) (tasks []store.Task, err error) {
 	defer func(startTime time.Time) {
 		took := time.Since(startTime)
-		log.Println("List", "->", tasks, err, "took:", took)
+		log.Println("List", filter, "->", tasks, err, "took:", took)
 	}(time.Now())
 
-	tasks, err = svc.next.List()
+	tasks, err = svc.next.List(filter)
 	return
 }
 

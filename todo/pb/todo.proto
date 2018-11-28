@@ -3,14 +3,17 @@ syntax = "proto3";
 package pb;
 
 service Todo {
-  rpc Add (AddRequest) returns (AddReply) {}
-  rpc List (ListRequest) returns (ListReply) {}
-  rpc Done (DoneRequest) returns (DoneReply) {}
+    rpc Add (AddRequest) returns (AddReply) {
+    }
+    rpc List (ListRequest) returns (ListReply) {
+    }
+    rpc Done (DoneRequest) returns (DoneReply) {
+    }
 }
 
 
 message AddRequest {
-  string desc = 1;
+    string desc = 1;
 }
 
 message AddReply {
@@ -18,15 +21,16 @@ message AddReply {
 
 
 message ListRequest {
+    DoneFilter doneFilter = 1;
 }
 
 message ListReply {
-  repeated Task tasks = 1;
+    repeated Task tasks = 1;
 }
 
 
 message DoneRequest {
-  int32 index = 1;
+    int32 index = 1;
 }
 
 message DoneReply {
@@ -34,6 +38,12 @@ message DoneReply {
 
 
 message Task {
-  string desc = 1;
-  bool done = 2;
+    string desc = 1;
+    bool done = 2;
+}
+
+enum DoneFilter {
+    NONE = 0;
+    DONE = 1;
+    NOT_DONE = 2;
 }

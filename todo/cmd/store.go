@@ -10,7 +10,7 @@ import (
 
 type Store interface {
 	Add(desc string) error
-	List() ([]store.Task, error)
+	List(filter store.Filter) ([]store.Task, error)
 	Done(index int) error
 }
 
@@ -38,8 +38,18 @@ func (adaptor grpcAdaptor) Add(desc string) error {
 	return err
 }
 
-func (adaptor grpcAdaptor) List() ([]store.Task, error) {
-	reply, err := adaptor.client.List(context.Background(), &pb.ListRequest{})
+func (adaptor grpcAdaptor) List(filter store.Filter) ([]store.Task, error) {
+
+	req := &pb.ListRequest{}
+
+	switch {
+	case filter.Done != nil && *filter.Done:
+		req.DoneFilter = pb.DoneFilter_DONE
+	case filter.Done != nil && !*filter.Done:
+		req.DoneFilter = pb.DoneFilter_NOT_DONE
+	}
+
+	reply, err := adaptor.client.List(context.Background(), req)
 	if err != nil {
 		return nil, err
 	}

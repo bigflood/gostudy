@@ -1,5 +1,7 @@
 package store
 
+import "errors"
+
 type Task struct {
 	Desc string
 	Done bool
@@ -38,6 +40,10 @@ func (p *InMem) List(filter Filter) ([]Task, error) {
 }
 
 func (p *InMem) Done(index int) error {
+	if index < 0 || index >= len(p.Tasks) {
+		return errors.New("index out of range")
+	}
+
 	p.Tasks[index].Done = true
 	return nil
 }
