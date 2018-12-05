@@ -1,0 +1,37 @@
+// Generated from todo.proto
+
+namespace pb;
+
+enum DoneFilter : int {
+  NONE = 0,
+  DONE = 1,
+  NOT_DONE = 2,
+}
+
+table AddRequest {
+  desc:string;
+}
+
+table AddReply {
+}
+
+table ListRequest {
+  doneFilter:pb.DoneFilter;
+}
+
+table ListReply {
+  tasks:[pb.Task];
+}
+
+table DoneRequest {
+  index:int;
+}
+
+table DoneReply {
+}
+
+table Task {
+  desc:string;
+  done:bool;
+}
+
