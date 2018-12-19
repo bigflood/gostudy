@@ -1,12 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"image"
 	"image/png"
 	"log"
 	"math/rand"
 	"net/http"
-	"time"
+	"sync"
 )
 
 const (
@@ -16,24 +17,27 @@ const (
 	numNeighbor = 8
 )
 
-var (
-	img = image.NewRGBA(image.Rectangle{Max: image.Point{X: width, Y: height}})
-)
+func main() {
+	rand.Seed(1234)
 
-func initImg() {
-	for i := 0; i < len(img.Pix); i += 4 {
-		v := uint8(rand.Intn(2) * 255)
-		img.Pix[i+0] = v
-		img.Pix[i+1] = v
-		img.Pix[i+2] = v
-		img.Pix[i+3] = 255
+	sim := startSim()
+
+	http.HandleFunc("/", homeHanlder)
+	http.HandleFunc("/image.png", sim.ImageHanlder)
+
+	log.Println("listen:", addr)
+
+	if err := http.ListenAndServe(addr, nil); err != nil {
+		log.Fatal(err)
 	}
 }
 
-func startSim() {
-	initImg()
-
+func startSim() *Sim {
 	sim := &Sim{}
+
+	sim.syncChan = make(chan bool, width*height)
+
+	sim.InitImages()
 
 	// n n n
 	// n p n
@@ -46,24 +50,33 @@ func startSim() {
 
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
+
+			var data PixSimData
+
 			pixIndex := (y*width + x) * 4
-			pix := img.Pix[pixIndex : pixIndex+4]
+			for i := 0; i < 2; i++ {
+				data.pixArr[i] = sim.images[i].Pix[pixIndex : pixIndex+4]
+			}
 
-			neighborChans := sim.NeighborChansAt(x, y)
-			thisChan := sim.ChanAt(x, y)
+			data.neighborChans = sim.NeighborChansAt(x, y)
+			data.thisChan = sim.ChanAt(x, y)
 
-			go sim.PixSim(
-				thisChan,
-				neighborChans,
-				pix,
-			)
-
+			go sim.PixSim(data)
 		}
 	}
+
+	go sim.EncodeImages()
+
+	return sim
 }
 
 type Sim struct {
+	images   [2]*image.RGBA
 	allChans []chan bool
+	syncChan chan bool
+
+	lock       sync.RWMutex
+	encodedImg bytes.Buffer
 }
 
 func (sim *Sim) ChanAt(x, y int) chan bool {
@@ -89,22 +102,32 @@ func (sim *Sim) NeighborChansAt(x, y int) []chan bool {
 	return chans
 }
 
-func (sim *Sim) PixSim(thisChan chan bool, neighborChans []chan bool, pix []uint8) {
-	curState := pix[0] > 0
+type PixSimData struct {
+	thisChan      chan bool
+	neighborChans []chan bool
+	pixArr        [2][]uint8
+}
+
+func (sim *Sim) PixSim(data PixSimData) {
+
+	curState := data.pixArr[0][0] > 0
+	index := 0
 
 	for {
-		for _, n := range neighborChans {
+		for _, n := range data.neighborChans {
 			n <- curState
 		}
 
 		numAlives := 0
 
-		for range neighborChans {
-			s := <-thisChan
+		for range data.neighborChans {
+			s := <-data.thisChan
 			if s {
 				numAlives++
 			}
 		}
+
+		pix := data.pixArr[index%2]
 
 		switch numAlives {
 		case 2:
@@ -120,31 +143,63 @@ func (sim *Sim) PixSim(thisChan chan bool, neighborChans []chan bool, pix []uint
 			pix[2] = 0
 		}
 
-		time.Sleep(1*time.Second)
+		//time.Sleep(1 * time.Second)
+		sim.syncChan <- curState
+		index++
 	}
 }
 
-func main() {
-	startSim()
+func (sim *Sim) InitImages() {
+	sim.images[0] = image.NewRGBA(image.Rectangle{Max: image.Point{X: width, Y: height}})
+	sim.images[1] = image.NewRGBA(image.Rectangle{Max: image.Point{X: width, Y: height}})
 
-	http.HandleFunc("/", homeHanlder)
-	http.HandleFunc("/image.png", imageHanlder)
+	img := sim.images[0]
+	for i := 0; i < len(img.Pix); i += 4 {
+		v := uint8(rand.Intn(2) * 255)
+		img.Pix[i+0] = v
+		img.Pix[i+1] = v
+		img.Pix[i+2] = v
+		img.Pix[i+3] = 255
+	}
 
-	log.Println("listen:", addr)
+	copy(sim.images[1].Pix, img.Pix)
+}
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
+func (sim *Sim) EncodeImages() {
+	for index := 0; ; index++ {
+		for i := 0; i < width*height; i++ {
+			<-sim.syncChan
+		}
+
+		sim.EncodeImage(index % 2)
+	}
+}
+
+func (sim *Sim) EncodeImage(imgIndex int) {
+	sim.lock.Lock()
+	defer sim.lock.Unlock()
+
+	img := sim.images[imgIndex]
+
+	sim.encodedImg.Reset()
+	err := png.Encode(&sim.encodedImg, img)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 var count = 0
 
-func imageHanlder(w http.ResponseWriter, r *http.Request) {
+func (sim *Sim) ImageHanlder(w http.ResponseWriter, r *http.Request) {
 	count++
 
 	w.Header().Set("Content-Type", "image/png")
 	w.WriteHeader(http.StatusOK)
-	png.Encode(w, img)
+
+	sim.lock.RLock()
+	defer sim.lock.RUnlock()
+
+	w.Write(sim.encodedImg.Bytes())
 }
 
 func homeHanlder(w http.ResponseWriter, r *http.Request) {
