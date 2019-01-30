@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"io"
 	"log"
 	"math/rand"
-	"net/http"
 	"sync"
 )
 
@@ -213,14 +213,12 @@ func (sim *Sim) EncodeImage() {
 
 var count = 0
 
-func (sim *Sim) ImageHanlder(w http.ResponseWriter, r *http.Request) {
+func (sim *Sim) WriteImage(w io.Writer) error {
 	count++
-
-	w.Header().Set("Content-Type", "image/png")
-	w.WriteHeader(http.StatusOK)
 
 	sim.lock.RLock()
 	defer sim.lock.RUnlock()
 
-	w.Write(sim.encodedImg.Bytes())
+	_, err := w.Write(sim.encodedImg.Bytes())
+	return err
 }

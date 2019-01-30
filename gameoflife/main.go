@@ -1,11 +1,14 @@
 package main
 
 import (
-	"github.com/bigflood/gostudy/gameoflife/sim"
 	"log"
 	"math/rand"
-	"net/http"
 	_ "net/http/pprof"
+
+	"github.com/bigflood/gostudy/gameoflife/api"
+	"github.com/bigflood/gostudy/gameoflife/sim"
+	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 const (
@@ -15,46 +18,25 @@ const (
 )
 
 func main() {
+
 	rand.Seed(1234)
 
 	sim := sim.New(width, height)
 
 	go sim.EncodeImages()
 
-	http.HandleFunc("/", homeHanlder)
-	http.HandleFunc("/image.png", sim.ImageHanlder)
+	handlers := api.New(sim)
+
+	e := echo.New()
+
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: "method=${method}, uri=${uri}, status=${status}\n",
+	}))
+
+	e.Static("/static", "static")
+	e.File("/", "static/index.html")
+	e.GET("/image.png", handlers.WriteImage)
 
 	log.Println("listen:", addr)
-
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal(err)
-	}
+	e.Logger.Fatal(e.Start(addr))
 }
-
-func homeHanlder(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(homeHtml))
-}
-
-const homeHtml = `<html>
-<head>
-</head>
-<body>
-<img id="img" src="/image.png">
-
-<script>
-window.onload = function() {
-    var image = document.getElementById("img");
-
-    function updateImage() {
-        image.src = image.src.split("?")[0] + "?" + new Date().getTime();
-    }
-
-    setInterval(updateImage, 1000);
-}
-</script>
-
-</body>
-</html>
-`
