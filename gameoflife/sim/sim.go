@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"image/color"
 	"image/png"
 	"io"
 	"log"
@@ -38,9 +39,7 @@ func New(width, height int) *Sim {
 			var data PixSimData
 
 			pixIndex := (y*width + x) * 4
-			for i := 0; i < 2; i++ {
-				data.pixArr[i] = sim.images[i].Pix[pixIndex : pixIndex+4]
-			}
+			data.pixArr = sim.images.Pix[pixIndex : pixIndex+4]
 
 			data.neighborChans = sim.NeighborChansAt(x, y)
 			data.thisChan = sim.ChanAt(x, y)
@@ -49,13 +48,15 @@ func New(width, height int) *Sim {
 		}
 	}
 
+	sim.inputCh = make(chan func(), 100)
+
 	return sim
 }
 
 type Sim struct {
 	width, height int
 
-	images   [2]*image.RGBA
+	images   *image.RGBA
 	allChans []chan Msg
 
 	lock       sync.RWMutex
@@ -65,6 +66,8 @@ type Sim struct {
 	curFrame int
 	frameWg  sync.WaitGroup
 	frameCh  [2]chan struct{}
+
+	inputCh chan func()
 }
 
 type Msg struct {
@@ -98,15 +101,15 @@ func (sim *Sim) NeighborChansAt(x, y int) []chan Msg {
 type PixSimData struct {
 	thisChan      chan Msg
 	neighborChans []chan Msg
-	pixArr        [2][]uint8
+	pixArr        []uint8
 }
 
 func (sim *Sim) PixSim(data PixSimData) {
 
-	curState := data.pixArr[0][0] > 0
-
 	for frame := 0; ; frame++ {
 		<-sim.frameCh[frame%2]
+
+		curState := data.pixArr[0] > 0
 
 		for _, n := range data.neighborChans {
 			n <- Msg{state: curState, frame: frame}
@@ -125,7 +128,7 @@ func (sim *Sim) PixSim(data PixSimData) {
 			}
 		}
 
-		pix := data.pixArr[frame%2]
+		pix := data.pixArr
 
 		switch numAlives {
 		case 2:
@@ -162,10 +165,9 @@ func (sim *Sim) PixSim(data PixSimData) {
 }
 
 func (sim *Sim) InitImages() {
-	sim.images[0] = image.NewRGBA(image.Rectangle{Max: image.Point{X: sim.width, Y: sim.height}})
-	sim.images[1] = image.NewRGBA(image.Rectangle{Max: image.Point{X: sim.width, Y: sim.height}})
+	sim.images = image.NewRGBA(image.Rectangle{Max: image.Point{X: sim.width, Y: sim.height}})
 
-	img := sim.images[0]
+	img := sim.images
 	for i := 0; i < len(img.Pix); i += 4 {
 		v := uint8(rand.Intn(2) * 255)
 		img.Pix[i+0] = v
@@ -174,12 +176,14 @@ func (sim *Sim) InitImages() {
 		img.Pix[i+3] = 255
 	}
 
-	copy(sim.images[1].Pix, img.Pix)
 }
 
 func (sim *Sim) EncodeImages() {
 	for index := 0; ; index++ {
 		sim.WaitForFrame()
+
+		sim.ProcessInputs()
+
 		sim.EncodeImage()
 	}
 }
@@ -201,8 +205,7 @@ func (sim *Sim) EncodeImage() {
 	sim.lock.Lock()
 	defer sim.lock.Unlock()
 
-	imgIndex := (sim.curFrame + 1) % 2
-	img := sim.images[imgIndex]
+	img := sim.images
 
 	sim.encodedImg.Reset()
 	err := png.Encode(&sim.encodedImg, img)
@@ -221,4 +224,26 @@ func (sim *Sim) WriteImage(w io.Writer) error {
 
 	_, err := w.Write(sim.encodedImg.Bytes())
 	return err
+}
+
+func (sim *Sim) OnClick(x, y int) error {
+
+	go func() {
+		sim.inputCh <- func() {
+			sim.images.Set(100, 100, color.White)
+		}
+	}()
+
+	return nil
+}
+
+func (sim *Sim) ProcessInputs() {
+	for {
+		select {
+		case f := <-sim.inputCh:
+			f()
+		default:
+			return
+		}
+	}
 }
