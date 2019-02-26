@@ -21,7 +21,7 @@
             image.src = image.src.split("?")[0] + "?" + new Date().getTime();
         }
 
-        setInterval(updateImage, 1000);
+        setInterval(updateImage, 250);
 
         $("img").on("click", function(event) {
             var x = event.pageX - this.offsetLeft;

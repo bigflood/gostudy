@@ -13,8 +13,8 @@ import (
 
 const (
 	addr   = ":8080"
-	width  = 500
-	height = 500
+	width  = 250
+	height = 250
 )
 
 func main() {
@@ -36,6 +36,7 @@ func main() {
 	e.Static("/static", "static")
 	e.File("/", "static/index.html")
 	e.GET("/image.png", handlers.WriteImage)
+	e.GET("/click", handlers.OnClick)
 
 	log.Println("listen:", addr)
 	e.Logger.Fatal(e.Start(addr))

@@ -226,11 +226,23 @@ func (sim *Sim) WriteImage(w io.Writer) error {
 	return err
 }
 
+func (sim *Sim) SetPixel(x, y int) {
+	w := sim.width
+	x = ((x % w) + w) % w
+
+	h := sim.height
+	y = ((y % h) + h) % h
+
+	sim.images.Set(x, y, color.White)
+}
+
 func (sim *Sim) OnClick(x, y int) error {
 
 	go func() {
 		sim.inputCh <- func() {
-			sim.images.Set(100, 100, color.White)
+			sim.SetPixel(x-1, y)
+			sim.SetPixel(x, y)
+			sim.SetPixel(x+1, y)
 		}
 	}()
 
