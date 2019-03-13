@@ -4,17 +4,17 @@ package restapi
 
 import (
 	"crypto/tls"
+	"log"
 	"net/http"
 
 	"github.com/bigflood/gostudy/swagger/models"
+	"github.com/bigflood/gostudy/swagger/restapi/operations"
+	"github.com/bigflood/gostudy/swagger/restapi/operations/admins"
+	"github.com/bigflood/gostudy/swagger/restapi/operations/developers"
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
 	"github.com/gorilla/handlers"
-
-	"github.com/bigflood/gostudy/swagger/restapi/operations"
-	"github.com/bigflood/gostudy/swagger/restapi/operations/admins"
-	"github.com/bigflood/gostudy/swagger/restapi/operations/developers"
 )
 
 //go:generate swagger generate server --target ../../swagger --name SimpleInventory --spec ../swagger.yaml
@@ -33,7 +33,7 @@ func configureAPI(api *operations.SimpleInventoryAPI) http.Handler {
 	// Expected interface func(string, ...interface{})
 	//
 	// Example:
-	// api.Logger = log.Printf
+	api.Logger = log.Printf
 
 	api.JSONConsumer = runtime.JSONConsumer()
 
@@ -60,7 +60,7 @@ func configureAPI(api *operations.SimpleInventoryAPI) http.Handler {
 
 	api.ServerShutdown = func() {}
 
-	return setupGlobalMiddleware(handlers.CORS()(api.Serve(setupMiddlewares)))
+	return setupGlobalMiddleware(api.Serve(setupMiddlewares))
 }
 
 // The TLS configuration before HTTPS server starts.
@@ -84,5 +84,9 @@ func setupMiddlewares(handler http.Handler) http.Handler {
 // The middleware configuration happens before anything, this middleware also applies to serving the swagger.json document.
 // So this is a good place to plug in a panic handling middleware, logging and metrics
 func setupGlobalMiddleware(handler http.Handler) http.Handler {
-	return handler
+	return handlers.CORS(
+		handlers.AllowedMethods([]string{"GET", "POST", "OPTIONS"}),
+		handlers.AllowedOrigins([]string{"*"}),
+		handlers.AllowedHeaders([]string{"Content-Type", "Referer", "User-Agent", "Accept-Encoding"}),
+	)(handler)
 }
